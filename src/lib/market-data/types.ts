@@ -30,6 +30,6 @@ export interface NormalizedMarketData {
 
 export interface MarketDataProvider {
   name: DataSource;
-  fetchQuote(ticker: string): Promise<NormalizedMarketData>;
+  fetchQuote(ticker: string): Promise<NormalizedMarketData | null>;
   fetchQuotes(tickers: string[]): Promise<NormalizedMarketData[]>;
 }

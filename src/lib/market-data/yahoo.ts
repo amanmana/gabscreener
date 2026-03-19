@@ -6,7 +6,7 @@
 import { NormalizedMarketData, MarketDataProvider, DataSource } from "./types";
 
 export class YahooProvider implements MarketDataProvider {
-  readonly source: DataSource = "yahoo";
+  readonly name: DataSource = "yahoo";
 
   private getProxyUrl(ticker: string, endpoint: 'quote' | 'chart' | 'v7' = 'quote'): string | null {
     const proxyBase = process.env.YAHOO_PROXY_URL || process.env.NEXT_PUBLIC_YAHOO_PROXY_URL;
@@ -85,10 +85,13 @@ export class YahooProvider implements MarketDataProvider {
         symbol,
         currentPrice,
         previousClose: prevClose,
-        open: open || currentPrice,
+        todayOpen: open || currentPrice,
+        premarketPrice: currentPrice,
         high: sessionHigh,
         low: sessionLow,
         premarketVolume: null,
+        volume: null,
+        rvol: null,
         gapPct,
         dataTimestamp: new Date(meta.regularMarketTime * 1000),
         dataSource: "yahoo",
