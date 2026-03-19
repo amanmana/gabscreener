@@ -106,18 +106,18 @@ export default function ScoreBreakdown({
             </span>
           </div>
           <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 4 }}>
-            SCORE
+            {finalScore === 0 && grade === "avoid" ? "DISQUALIFIED" : "SCORE"}
           </div>
         </div>
       </div>
 
       <div>
-        <BarRow label="Gap Score" value={gapScore} max={25} color="#06b6d4" />
+        <BarRow label="Gap Score" value={gapScore} max={15} color="#06b6d4" />
         <BarRow label="Premarket Volume" value={premarketVolScore} max={20} color="#f59e0b" />
         <BarRow label="Relative Volume" value={rvolScore} max={15} color="#3b82f6" />
-        <BarRow label="Structure" value={structureScore} max={20} color="#10b981" />
-        <BarRow label="Liquidity" value={liquidityScore} max={10} color="#8b5cf6" />
-        <BarRow label="Catalyst" value={catalystScore} max={10} color="#a78bfa" />
+        <BarRow label="Structure" value={structureScore} max={30} color="#10b981" />
+        <BarRow label="Liquidity" value={liquidityScore} max={15} color="#8b5cf6" />
+        <BarRow label="Catalyst" value={catalystScore} max={5} color="#a78bfa" />
 
         {totalPenalty < 0 && (
           <>
