@@ -19,7 +19,13 @@ class FallbackProvider implements MarketDataProvider {
   async fetchQuote(ticker: string): Promise<NormalizedMarketData> {
     try {
       console.log(`[MarketData] Attempting Yahoo for ${ticker}...`);
-      return await yahoo.fetchQuote(ticker);
+      const res = await yahoo.fetchQuote(ticker);
+      
+      // If Yahoo returns "unavailable", treat it as a failure and fallback
+      if (res.calculationMode === "unavailable" && !res.previousClose) {
+        throw new Error("Yahoo returned unavailable data");
+      }
+      return res;
     } catch (err) {
       console.warn(`[MarketData] Yahoo FAILED for ${ticker}, falling back to Stooq:`, (err as any).message);
       return await stooq.fetchQuote(ticker);
@@ -27,10 +33,16 @@ class FallbackProvider implements MarketDataProvider {
   }
 
   async fetchQuotes(tickers: string[]): Promise<NormalizedMarketData[]> {
-    // In many cases, if Yahoo is blocked, it's blocked for the whole IP.
-    // So if the first one fails, we might as well switch the whole batch to Stooq.
     try {
-      return await yahoo.fetchQuotes(tickers);
+      const results = await yahoo.fetchQuotes(tickers);
+      
+      // Check if majority of results are unavailable
+      const failures = results.filter(r => r.calculationMode === "unavailable" && !r.previousClose).length;
+      if (failures > tickers.length / 2) {
+        console.warn(`[MarketData] Multiple Yahoo failures (${failures}/${tickers.length}), switching batch to Stooq.`);
+        return await stooq.fetchQuotes(tickers);
+      }
+      return results;
     } catch (err) {
       console.warn(`[MarketData] Batch Yahoo fetch failed, falling back to Stooq.`);
       return await stooq.fetchQuotes(tickers);
