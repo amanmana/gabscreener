@@ -36,7 +36,24 @@ export class YahooProvider implements MarketDataProvider {
   name: DataSource = "yahoo";
 
   /**
-   * Internal helper using native fetch with browser headers
+   * Internal helper using v8 chart endpoint (often less restricted than quote)
+   */
+  private async fetchFromChart(ticker: string): Promise<any> {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1m&range=1d&includePrePost=true`;
+    console.log(`[YahooProvider] Attempting Chart Fetch for ${ticker}...`);
+    
+    const res = await fetch(url, { headers: HEADERS });
+    if (res.status === 429) throw new Error("Yahoo Rate Limit (429)");
+    if (!res.ok) throw new Error(`Yahoo Chart Error: ${res.status}`);
+    
+    const body = await res.json();
+    const result = body?.chart?.result?.[0];
+    if (!result) throw new Error("No chart result in Yahoo response");
+    return result;
+  }
+
+  /**
+   * Fallback helper using v7 quote endpoint
    */
   private async fetchManual(ticker: string, version: "v7" | "v6" = "v7"): Promise<any> {
     const url = `https://query1.finance.yahoo.com/${version}/finance/quote?symbols=${ticker}`;
@@ -52,29 +69,21 @@ export class YahooProvider implements MarketDataProvider {
   }
 
   async fetchQuote(ticker: string): Promise<NormalizedMarketData> {
-    // 1. Check cache
     const cached = cache.get(ticker);
     if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
       return cached.data;
     }
 
     try {
-      // 2. Try manual fetch with browser headers (v7)
-      let result: any;
-      try {
-        result = await this.fetchManual(ticker, "v7");
-      } catch (err: any) {
-        console.warn(`[YahooProvider] Manual v7 failed for ${ticker}, trying v6 fallback: ${err.message}`);
-        // Fallback to legacy v6 if v7 fails
-        result = await this.fetchManual(ticker, "v6");
-      }
+      // 1. Try Chart first (Resilient)
+      const chart = await this.fetchFromChart(ticker);
+      const meta = chart.meta;
 
-      const prevClose = result.regularMarketPreviousClose ?? result.prevClose ?? null;
-      const currentPrice = result.regularMarketPrice ?? result.price ?? null;
-      const prePrice = result.preMarketPrice ?? null;
-      const openPrice = result.regularMarketOpen ?? null;
-      const volume = result.regularMarketVolume ?? null;
-      const preVolume = result.preMarketVolume ?? null;
+      const prevClose = meta.previousClose ?? null;
+      const currentPrice = meta.regularMarketPrice ?? null;
+      const prePrice = meta.preMarketPrice ?? null;
+      const openPrice = meta.regularMarketOpen ?? null;
+      const volume = meta.regularMarketVolume ?? null;
 
       let gapPct: number | null = null;
       let calcMode: CalculationMode = "unavailable";
@@ -96,12 +105,11 @@ export class YahooProvider implements MarketDataProvider {
         premarketPrice: prePrice,
         todayOpen: openPrice,
         volume: volume,
-        premarketVolume: preVolume,
+        premarketVolume: null,
         gapPct,
         rvol: null,
-        high: result.regularMarketDayHigh ?? null,
-        low: result.regularMarketDayLow ?? null,
-        
+        high: null,
+        low: null,
         dataSource: "yahoo",
         dataTimestamp: new Date(),
         calculationMode: calcMode,
@@ -112,36 +120,75 @@ export class YahooProvider implements MarketDataProvider {
       return normalized;
       
     } catch (error: any) {
-       console.error(`[YahooProvider] ERROR for ${ticker}:`, error.message);
-       throw error;
+       console.warn(`[YahooProvider] Chart failed for ${ticker}, trying Quote: ${error.message}`);
+       try {
+         // 2. Fallback to manual Quote v7
+         const result = await this.fetchManual(ticker, "v7");
+         
+         const prevClose = result.regularMarketPreviousClose ?? result.prevClose ?? null;
+         const currentPrice = result.regularMarketPrice ?? result.price ?? null;
+         const prePrice = result.preMarketPrice ?? null;
+         const openPrice = result.regularMarketOpen ?? null;
+
+         let gapPct: number | null = null;
+         let calcMode: CalculationMode = "unavailable";
+
+         if (prevClose && prevClose > 0) {
+           if (prePrice && prePrice > 0) {
+             gapPct = ((prePrice - prevClose) / prevClose) * 100;
+             calcMode = "premarket";
+           } else if (openPrice && openPrice > 0) {
+             gapPct = ((openPrice - prevClose) / prevClose) * 100;
+             calcMode = "open-based";
+           }
+         }
+
+         const normalized: NormalizedMarketData = {
+           symbol: ticker,
+           previousClose: prevClose,
+           currentPrice: currentPrice,
+           premarketPrice: prePrice,
+           todayOpen: openPrice,
+           volume: result.regularMarketVolume ?? null,
+           premarketVolume: result.preMarketVolume ?? null,
+           gapPct,
+           rvol: null,
+           high: result.regularMarketDayHigh ?? null,
+           low: result.regularMarketDayLow ?? null,
+           dataSource: "yahoo",
+           dataTimestamp: new Date(),
+           calculationMode: calcMode,
+           isStale: false,
+         };
+         
+         cache.set(ticker, { data: normalized, timestamp: Date.now() });
+         return normalized;
+       } catch (finalError: any) {
+         console.error(`[YahooProvider] CRITICAL ERROR for ${ticker}:`, finalError.message);
+         throw finalError;
+       }
     }
   }
 
   async fetchQuotes(tickers: string[]): Promise<NormalizedMarketData[]> {
-    // yahoo-finance2.quote can handle an array of tickers
-    // but results are often incomplete if one fails, so we map individually or use quoteCombine (not available in v2)
-    // Actually, calling .quote or better .quoteSummary for multiple or just Promise.all
     return Promise.all(tickers.map(t => this.fetchQuote(t).catch(err => {
-        // Return a dummy/empty shell for failed tickers so the rest don't crash
-        return {
-            symbol: t,
-            previousClose: null,
-            todayOpen: null,
-            premarketPrice: null,
-            premarketVolume: null,
-            currentPrice: null,
-            high: null,
-            low: null,
-            volume: null,
-            gapPct: null,
-            rvol: null,
-            dataSource: this.name,
-            dataTimestamp: new Date(),
-            calculationMode: "unavailable" as CalculationMode,
-            isStale: true
-        } as NormalizedMarketData;
+      return {
+        symbol: t,
+        previousClose: null,
+        todayOpen: null,
+        premarketPrice: null,
+        premarketVolume: null,
+        currentPrice: null,
+        high: null,
+        low: null,
+        volume: null,
+        gapPct: null,
+        rvol: null,
+        dataSource: "yahoo",
+        dataTimestamp: new Date(),
+        calculationMode: "unavailable",
+        isStale: true
+      } as NormalizedMarketData;
     })));
   }
 }
-
-export const yahooProvider = new YahooProvider();
