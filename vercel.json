@@ -1,7 +1,7 @@
 {
   "crons": [
     {
-      "path": "/api/cron/premarket",
+      "path": "/api/cron/sync-market",
       "schedule": "30 13 * * 1-5"
     },
     {
