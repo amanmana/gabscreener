@@ -19,15 +19,15 @@ const TODAY = new Date().toISOString().split("T")[0];
 // --- Mock Data ---
 
 const STOCKS = [
-  { ticker: "NVDA", name: "NVIDIA Corporation", exchange: "NASDAQ", sector: "Technology", marketCap: 30000000000, shariahStatus: "compliant" as const },
-  { ticker: "AAPL", name: "Apple Inc.", exchange: "NASDAQ", sector: "Technology", marketCap: 35000000000, shariahStatus: "compliant" as const },
-  { ticker: "MSFT", name: "Microsoft Corporation", exchange: "NASDAQ", sector: "Technology", marketCap: 32000000000, shariahStatus: "compliant" as const },
-  { ticker: "TSM", name: "Taiwan Semiconductor Mfg", exchange: "NYSE", sector: "Technology", marketCap: 9000000000, shariahStatus: "compliant" as const },
-  { ticker: "AVGO", name: "Broadcom Inc.", exchange: "NASDAQ", sector: "Technology", marketCap: 8000000000, shariahStatus: "compliant" as const },
-  { ticker: "ASML", name: "ASML Holding NV", exchange: "NASDAQ", sector: "Technology", marketCap: 4000000000, shariahStatus: "compliant" as const },
-  { ticker: "ORCL", name: "Oracle Corporation", exchange: "NYSE", sector: "Technology", marketCap: 4500000000, shariahStatus: "compliant" as const },
-  { ticker: "AMD", name: "Advanced Micro Devices", exchange: "NASDAQ", sector: "Technology", marketCap: 2600000000, shariahStatus: "compliant" as const },
-  { ticker: "TSLA", name: "Tesla Inc.", exchange: "NASDAQ", sector: "Consumer Discretionary", marketCap: 8000000000, shariahStatus: "compliant" as const },
+  { ticker: "NVDA", name: "NVIDIA Corporation", exchange: "NASDAQ", sector: "Technology", marketCap: 3000000.0, shariahStatus: "compliant" as const },
+  { ticker: "AAPL", name: "Apple Inc.", exchange: "NASDAQ", sector: "Technology", marketCap: 3500000.0, shariahStatus: "compliant" as const },
+  { ticker: "MSFT", name: "Microsoft Corporation", exchange: "NASDAQ", sector: "Technology", marketCap: 3200000.0, shariahStatus: "compliant" as const },
+  { ticker: "TSM", name: "Taiwan Semiconductor Mfg", exchange: "NYSE", sector: "Technology", marketCap: 900000.0, shariahStatus: "compliant" as const },
+  { ticker: "AVGO", name: "Broadcom Inc.", exchange: "NASDAQ", sector: "Technology", marketCap: 800000.0, shariahStatus: "compliant" as const },
+  { ticker: "ASML", name: "ASML Holding NV", exchange: "NASDAQ", sector: "Technology", marketCap: 400000.0, shariahStatus: "compliant" as const },
+  { ticker: "ORCL", name: "Oracle Corporation", exchange: "NYSE", sector: "Technology", marketCap: 450000.0, shariahStatus: "compliant" as const },
+  { ticker: "AMD", name: "Advanced Micro Devices", exchange: "NASDAQ", sector: "Technology", marketCap: 260000.0, shariahStatus: "compliant" as const },
+  { ticker: "TSLA", name: "Tesla Inc.", exchange: "NASDAQ", sector: "Consumer Discretionary", marketCap: 800000.0, shariahStatus: "compliant" as const },
 ];
 
 const PREMARKET = [
@@ -67,7 +67,14 @@ async function main() {
   for (const s of STOCKS) {
     await db.insert(schema.stocks).values(s).onConflictDoUpdate({ 
       target: schema.stocks.ticker, 
-      set: { name: s.name, exchange: s.exchange, sector: s.sector, marketCap: s.marketCap, shariahStatus: s.shariahStatus } 
+      set: { 
+        name: s.name, 
+        exchange: s.exchange, 
+        sector: s.sector, 
+        marketCap: s.marketCap, 
+        shariahStatus: s.shariahStatus,
+        updatedAt: new Date()
+      } 
     });
   }
 
@@ -75,12 +82,11 @@ async function main() {
   for (const s of STOCKS) {
     await db.insert(schema.shariahUniverse).values({
       ticker: s.ticker,
-      shariahStatus: s.shariahStatus,
       source: "Manual",
-      lastChecked: new Date(),
+      lastReviewedAt: new Date(),
     }).onConflictDoUpdate({ 
       target: schema.shariahUniverse.ticker, 
-      set: { shariahStatus: s.shariahStatus, lastChecked: new Date() } 
+      set: { lastReviewedAt: new Date() } 
     });
   }
 
@@ -103,10 +109,13 @@ async function main() {
   // 4. Insert intraday metrics
   for (const ticker in INTRADAY) {
     const m = INTRADAY[ticker];
+    const prevClose = PREMARKET.find(p => p.ticker === ticker)?.prevClose ?? 0;
+    const premarketPrice = PREMARKET.find(p => p.ticker === ticker)?.premarketPrice ?? 0;
+    
     await db.insert(schema.intradayMetrics).values({
       ticker,
       date: TODAY,
-      currentPrice: PREMARKET.find(p => p.ticker === ticker)?.premarketPrice ?? 0,
+      currentPrice: premarketPrice,
       rvol: m.rvol,
       spreadPct: m.spreadPct,
       dollarVolume: m.dollarVolume,
@@ -119,7 +128,13 @@ async function main() {
       poorLiquidityAfterOpen: m.poorLiquidityAfterOpen,
     }).onConflictDoUpdate({ 
       target: [schema.intradayMetrics.ticker, schema.intradayMetrics.date], 
-      set: { rvol: m.rvol, spreadPct: m.spreadPct, holdsAboveVwap: m.holdsAboveVwap } 
+      set: { 
+        currentPrice: premarketPrice,
+        rvol: m.rvol, 
+        spreadPct: m.spreadPct, 
+        holdsAboveVwap: m.holdsAboveVwap,
+        updatedAt: new Date()
+      } 
     });
   }
 
@@ -146,9 +161,9 @@ async function main() {
     const catalystEntry = CATALYSTS.find((c) => c.ticker === pm.ticker);
 
     const penalties = {
-      spreadTooWide: intra.spreadPct > 0.3,
+      spreadTooWide: (intra.spreadPct ?? 0) > 0.3,
       weakRejectionAfterOpen: intra.weakRejection,
-      belowPremarketVwap: !intra.holdsAboveVwap && px < pm.premarketVwap,
+      belowPremarketVwap: !intra.holdsAboveVwap && px < (pm.premarketVwap ?? 0),
       extendedFromBase: intra.extendedFromBase,
       choppyStructure: intra.choppyStructure,
       poorLiquidityAfterOpen: intra.poorLiquidityAfterOpen,
@@ -164,8 +179,8 @@ async function main() {
         tightConsolidation: intra.tightConsolidation,
       },
       liquidity: {
-        tightSpread: intra.spreadPct < 0.2,
-        strongDollarVolume: intra.dollarVolume > 80_000_000,
+        tightSpread: (intra.spreadPct ?? 0) < 0.2,
+        strongDollarVolume: (intra.dollarVolume ?? 0) > 80_000_000,
       },
       hasCatalyst,
       penalties,

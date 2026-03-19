@@ -7,12 +7,14 @@ import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import * as schema from "./schema";
 
+// Neon serverless SQL client (with fallback for build-time/demo-mode)
+const dbUrl = process.env.DATABASE_URL || "postgres://localhost:5432/mock";
+
 if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL environment variable is not set");
+  console.warn("⚠️ DATABASE_URL is not set. Database operations will fail (Falling back to Demo Mode).");
 }
 
-// Neon serverless SQL client
-const sql = neon(process.env.DATABASE_URL);
+const sql = neon(dbUrl);
 
 // Drizzle ORM instance with full schema
 export const db = drizzle(sql, { schema });

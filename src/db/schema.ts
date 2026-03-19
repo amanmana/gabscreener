@@ -13,6 +13,7 @@ import {
   serial,
   varchar,
   index,
+  uniqueIndex,
   pgEnum,
 } from "drizzle-orm/pg-core";
 
@@ -113,7 +114,7 @@ export const dailyPrices = pgTable(
     adjustedClose: real("adjusted_close"),
   },
   (t) => [
-    index("daily_prices_ticker_date_idx").on(t.ticker, t.date),
+    uniqueIndex("daily_prices_ticker_date_idx").on(t.ticker, t.date),
     index("daily_prices_date_idx").on(t.date),
   ]
 );
@@ -141,7 +142,7 @@ export const premarketSnapshots = pgTable(
     capturedAt: timestamp("captured_at").notNull().defaultNow(),
   },
   (t) => [
-    index("premarket_ticker_date_idx").on(t.ticker, t.date),
+    uniqueIndex("premarket_ticker_date_idx").on(t.ticker, t.date),
     index("premarket_gap_idx").on(t.gapPct),
     index("premarket_vol_idx").on(t.premarketVolume),
     index("premarket_date_idx").on(t.date),
@@ -177,7 +178,7 @@ export const intradayMetrics = pgTable(
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (t) => [
-    index("intraday_ticker_date_idx").on(t.ticker, t.date),
+    uniqueIndex("intraday_ticker_date_idx").on(t.ticker, t.date),
     index("intraday_rvol_idx").on(t.rvol),
   ]
 );
@@ -254,7 +255,7 @@ export const signals = pgTable(
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (t) => [
-    index("signals_ticker_date_idx").on(t.ticker, t.date),
+    uniqueIndex("signals_ticker_date_idx").on(t.ticker, t.date),
     index("signals_grade_idx").on(t.grade),
     index("signals_score_idx").on(t.finalScore),
     index("signals_date_idx").on(t.date),
