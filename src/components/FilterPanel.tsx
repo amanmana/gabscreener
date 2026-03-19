@@ -93,10 +93,14 @@ export default function FilterPanel({ value, onChange }: FilterPanelProps) {
           type="number"
           className="input-dark"
           value={value.minGap}
-          onChange={(e) => onChange({ ...value, minGap: parseFloat(e.target.value) || 4 })}
+          onChange={(e) => {
+            const val = parseFloat(e.target.value);
+            onChange({ ...value, minGap: isNaN(val) ? 0 : val });
+          }}
           style={{ width: 64, padding: "4px 8px" }}
-          step="0.5"
-          min="4"
+          step="1"
+          min="-50"
+          max="50"
         />
         <span style={{ fontSize: 11, color: "var(--text-muted)" }}>%</span>
       </div>
@@ -112,6 +116,8 @@ export default function FilterPanel({ value, onChange }: FilterPanelProps) {
           }
           style={{ width: 100, padding: "4px 8px" }}
         >
+          <option value={0}>No Min</option>
+          <option value={100000}>100K</option>
           <option value={300000}>300K</option>
           <option value={500000}>500K</option>
           <option value={1000000}>1M</option>
