@@ -76,6 +76,9 @@ export class YahooProvider implements MarketDataProvider {
       const sessionHigh = highs.length > 0 ? Math.max(...highs) : currentPrice;
       const sessionLow = lows.length > 0 ? Math.min(...lows) : currentPrice;
 
+      const vols: number[] = quote?.volume ? quote.volume.filter((v: any) => typeof v === 'number') : [];
+      const sessionVolume = vols.length > 0 ? vols.reduce((a, b) => a + b, 0) : null;
+
       let gapPct = 0;
       if (prevClose && currentPrice) {
         gapPct = ((currentPrice - prevClose) / prevClose) * 100;
@@ -89,8 +92,8 @@ export class YahooProvider implements MarketDataProvider {
         premarketPrice: currentPrice,
         high: sessionHigh,
         low: sessionLow,
-        premarketVolume: null,
-        volume: null,
+        premarketVolume: sessionVolume,
+        volume: sessionVolume,
         rvol: null,
         gapPct,
         dataTimestamp: new Date(meta.regularMarketTime * 1000),
