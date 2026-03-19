@@ -25,10 +25,12 @@ export const runtime = "nodejs"; // cron jobs use nodejs runtime
 export async function GET(req: NextRequest) {
   // Validate cron secret
   const authHeader = req.headers.get("authorization");
-  if (
-    process.env.NODE_ENV !== "development" && 
-    authHeader !== `Bearer ${process.env.CRON_SECRET}`
-  ) {
+  const urlSecret = req.nextUrl.searchParams.get("secret");
+  const isValidSecret = 
+    authHeader === `Bearer ${process.env.CRON_SECRET}` || 
+    urlSecret === process.env.CRON_SECRET;
+
+  if (process.env.NODE_ENV !== "development" && !isValidSecret) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
