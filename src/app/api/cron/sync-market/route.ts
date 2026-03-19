@@ -64,6 +64,7 @@ export async function GET(req: NextRequest) {
             todayOpen: snapshotValues.todayOpen,
             gapPct: snapshotValues.gapPct,
             calculationMode: snapshotValues.calculationMode,
+            dataSource: snapshotValues.dataSource,
             capturedAt: snapshotValues.capturedAt,
           },
         });
