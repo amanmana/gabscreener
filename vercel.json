@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/premarket",
+      "schedule": "30 13 * * 1-5"
+    },
+    {
+      "path": "/api/cron/score",
+      "schedule": "0 14 * * 1-5"
+    },
+    {
+      "path": "/api/cron/sync-eod",
+      "schedule": "0 22 * * 1-5"
+    }
+  ]
+}
