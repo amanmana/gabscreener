@@ -32,6 +32,14 @@ export async function fetchLiveMarketData(tickers: string[]): Promise<MarketData
 }
 
 /**
+ * Compatibility alias for older scripts
+ */
+export const marketData = async (tickers: string[]) => {
+  const { results } = await fetchLiveMarketData(tickers);
+  return results;
+};
+
+/**
  * Single ticker fetch with safety checks
  */
 export async function fetchSingleTicker(ticker: string): Promise<NormalizedMarketData | null> {

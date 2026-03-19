@@ -6,7 +6,7 @@
 import * as dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 
-import { marketData } from "../lib/market-data";
+import { fetchLiveMarketData } from "../lib/market-data";
 
 async function main() {
   const ticker = "NVDA";
