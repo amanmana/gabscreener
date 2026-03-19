@@ -137,8 +137,11 @@ export const premarketSnapshots = pgTable(
     premarketHigh: real("premarket_high"),
     premarketLow: real("premarket_low"),
     premarketVwap: real("premarket_vwap"),
-    premarketVolume: integer("premarket_volume").notNull(), // must be >= 300k to qualify
-    gapPct: real("gap_pct").notNull(), // (premarketPrice - prevClose) / prevClose * 100
+    premarketVolume: integer("premarket_volume"),
+    todayOpen: real("today_open"),
+    gapPct: real("gap_pct").notNull(), 
+    dataSource: varchar("data_source", { length: 50 }), // 'yahoo', 'mock', etc.
+    calculationMode: varchar("calculation_mode", { length: 50 }), // 'premarket', 'open-based'
     capturedAt: timestamp("captured_at").notNull().defaultNow(),
   },
   (t) => [
@@ -243,6 +246,10 @@ export const signals = pgTable(
     premarketPrice: real("premarket_price"),
     hasCatalyst: boolean("has_catalyst").notNull().default(false),
     catalystType: catalystTypeEnum("catalyst_type"),
+    
+    dataSource: varchar("data_source", { length: 50 }),
+    calculationMode: varchar("calculation_mode", { length: 50 }),
+    lastUpdated: timestamp("last_updated").notNull().defaultNow(),
 
     // Is this actually tradeable (vs just discovery-level)
     isTradeable: boolean("is_tradeable").notNull().default(false),

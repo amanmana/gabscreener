@@ -13,24 +13,6 @@ import EntryStatusBadge from "@/components/EntryStatusBadge";
 
 export const revalidate = 60; // ISR: revalidate every 60s
 
-// Mock data for "Demo Mode" when DB is not connected
-const DEMO_DATA = {
-  totalSignals: 42,
-  aCount: 12,
-  bCount: 18,
-  tradeableCount: 8,
-  avgScore: 72,
-  topSignals: [
-    { ticker: "NVDA", name: "NVIDIA Corporation", finalScore: 94, grade: "A", entryStatus: "Breakout Triggered", gapPct: 12.4, hasCatalyst: true, isTradeable: true, premarketPrice: 155.0 },
-    { ticker: "CRWD", name: "CrowdStrike Holdings", finalScore: 88, grade: "A", entryStatus: "Near Trigger", gapPct: 8.7, hasCatalyst: true, isTradeable: true, premarketPrice: 413.0 },
-    { ticker: "AAPL", name: "Apple Inc.", finalScore: 82, grade: "A", entryStatus: "Watch", gapPct: 4.2, hasCatalyst: true, isTradeable: false, premarketPrice: 232.0 },
-    { ticker: "MSFT", name: "Microsoft Corporation", finalScore: 78, grade: "B", entryStatus: "Near Trigger", gapPct: 5.1, hasCatalyst: false, isTradeable: true, premarketPrice: 432.0 },
-    { ticker: "TSM", name: "Taiwan Semiconductor Mfg", finalScore: 75, grade: "B", entryStatus: "Watch", gapPct: 4.8, hasCatalyst: false, isTradeable: false, premarketPrice: 185.5 },
-    { ticker: "ADBE", name: "Adobe Inc.", finalScore: 72, grade: "B", entryStatus: "Watch", gapPct: 6.2, hasCatalyst: true, isTradeable: false, premarketPrice: 459.0 },
-  ],
-  isDemo: true,
-};
-
 async function getDashboardData() {
   const today = new Date().toISOString().split("T")[0];
 
@@ -91,13 +73,26 @@ async function getDashboardData() {
           .then((r) => Math.round(Number(r[0]?.avg ?? 0))),
       ]);
 
-    // If no signals today, might be unseeded
-    if (totalSignals === 0) return DEMO_DATA;
-
-    return { totalSignals, aCount, bCount, tradeableCount, topSignals, avgScore: avgScoreResult, isDemo: false };
+    return { 
+      totalSignals, 
+      aCount, 
+      bCount, 
+      tradeableCount, 
+      topSignals, 
+      avgScore: avgScoreResult, 
+      isDemo: false 
+    };
   } catch (err) {
-    console.warn("[Dashboard DB Error] Defaulting to Demo Mode:", err);
-    return DEMO_DATA;
+    console.warn("[Dashboard DB Error]:", err);
+    return { 
+      totalSignals: 0, 
+      aCount: 0, 
+      bCount: 0, 
+      tradeableCount: 0, 
+      topSignals: [], 
+      avgScore: 0, 
+      isDemo: false 
+    };
   }
 }
 

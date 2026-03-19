@@ -21,6 +21,9 @@ export interface ScreenerRow {
   hasCatalyst: boolean;
   isTradeable: boolean;
   catalystType: string | null;
+  dataSource?: string | null;
+  calculationMode?: string | null;
+  lastUpdated?: string | null;
 }
 
 type SortKey = "finalScore" | "gapPct" | "premarketVolume" | "rvol";
@@ -125,6 +128,8 @@ export default function ScreenerTable({
               </span>
             </th>
             <th>Grade</th>
+            <th>Data Source</th>
+            <th>Last Verified</th>
             <th>Status</th>
             <th>Tradeable</th>
           </tr>
@@ -187,7 +192,7 @@ export default function ScreenerTable({
                 {/* Gap % */}
                 <td>
                   <span className="chip chip-gap">
-                    +{fmt(row.gapPct, 1)}%
+                    {row.calculationMode !== "unavailable" ? `+${fmt(row.gapPct, 1)}%` : "N/A"}
                   </span>
                 </td>
 
@@ -262,6 +267,33 @@ export default function ScreenerTable({
                 {/* Grade */}
                 <td>
                   <ScoreBadge grade={row.grade} size="sm" />
+                </td>
+
+                {/* Data Source */}
+                <td>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    <span 
+                      style={{ 
+                        fontSize: 10, 
+                        fontWeight: 700, 
+                        textTransform: "uppercase",
+                        color: row.dataSource === "yahoo" ? "#10b981" : "#f59e0b",
+                        letterSpacing: "0.05em"
+                      }}
+                    >
+                      {row.dataSource || "unverified"}
+                    </span>
+                    <span style={{ fontSize: 9, color: "var(--text-muted)" }}>
+                      {row.calculationMode === "premarket" ? "Premarket-based" : row.calculationMode === "open-based" ? "Open-based" : "N/A"}
+                    </span>
+                  </div>
+                </td>
+
+                {/* Last Verified */}
+                <td>
+                  <span style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                    {row.lastUpdated ? new Date(row.lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "—"}
+                  </span>
                 </td>
 
                 {/* Entry Status */}

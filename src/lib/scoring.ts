@@ -15,6 +15,8 @@
  * Penalties: up to -80 (Aggressive Risk Rules)
  */
 
+import { NormalizedMarketData } from "./market-data/types";
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface StructureParams {
@@ -250,10 +252,23 @@ export interface FullScoreInput {
   gapPct: number;
   premarketVol: number;
   rvol: number;
+  currentPrice?: number;
   structure: StructureParams;
   liquidity: LiquidityParams;
   hasCatalyst: boolean;
   penalties: PenaltyParams;
+}
+
+/**
+ * Data Validation (Production Safety)
+ */
+export function validateMarketData(data: NormalizedMarketData): boolean {
+  if (!data.symbol) return false;
+  if (!data.previousClose || data.previousClose <= 0) return false;
+  if (data.calculationMode === "unavailable") return false;
+  if (data.isStale) return false;
+  if (data.gapPct === null) return false;
+  return true;
 }
 
 export function computeFullScore(input: FullScoreInput): ScoreBreakdown {
@@ -291,4 +306,32 @@ export function computeFullScore(input: FullScoreInput): ScoreBreakdown {
     grade,
     isTradeable,
   };
+}
+
+/**
+ * Wrapper to score directly from normalized market data
+ */
+export function scoreFromMarketData(
+  data: NormalizedMarketData, 
+  extra: { 
+    rvol: number;
+    structure: StructureParams;
+    hasCatalyst: boolean;
+    penalties: PenaltyParams;
+  }
+): ScoreBreakdown | null {
+  if (!validateMarketData(data)) return null;
+
+  return computeFullScore({
+    gapPct: data.gapPct!,
+    premarketVol: data.premarketVolume ?? 0,
+    rvol: extra.rvol,
+    structure: extra.structure,
+    liquidity: {
+      tightSpread: (data.currentPrice ?? 0) > 0 ? (0.3 / 100) > ((data.currentPrice ?? 0) * 0.003) : false, // simplified logic here, actual spreadPct check is better
+      strongDollarVolume: ((data.currentPrice ?? 0) * (data.premarketVolume ?? 0)) > 50_000_000,
+    },
+    hasCatalyst: extra.hasCatalyst,
+    penalties: extra.penalties,
+  });
 }

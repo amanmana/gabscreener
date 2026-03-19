@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
 
       const score = computeFullScore({
         gapPct: snap.gapPct,
-        premarketVol: snap.premarketVolume,
+        premarketVol: snap.premarketVolume ?? 0,
         rvol: intra.rvol ?? 1,
         structure: {
           holdsAboveVwap: intra.holdsAboveVwap ?? false,
@@ -127,6 +127,9 @@ export async function GET(req: NextRequest) {
           hasCatalyst,
           catalystType: hasCatalyst ? catalyst?.type : null,
           isTradeable: score.isTradeable,
+          dataSource: snap.dataSource,
+          calculationMode: snap.calculationMode,
+          lastUpdated: new Date(),
         })
         .onConflictDoUpdate({
           target: [signals.ticker, signals.date],
@@ -135,6 +138,9 @@ export async function GET(req: NextRequest) {
             grade: score.grade,
             entryStatus,
             isTradeable: score.isTradeable,
+            dataSource: snap.dataSource,
+            calculationMode: snap.calculationMode,
+            lastUpdated: new Date(),
             updatedAt: new Date(),
           },
         });

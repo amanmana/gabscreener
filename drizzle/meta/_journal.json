@@ -15,6 +15,13 @@
       "when": 1773885422757,
       "tag": "0001_military_nomad",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1773886497195,
+      "tag": "0002_unique_next_avengers",
+      "breakpoints": true
     }
   ]
 }
