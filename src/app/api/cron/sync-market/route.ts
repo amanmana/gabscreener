@@ -18,7 +18,10 @@ export const runtime = "nodejs";
 export async function GET(req: NextRequest) {
   // Protect with cron secret
   const authHeader = req.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (
+    process.env.NODE_ENV !== "development" && 
+    authHeader !== `Bearer ${process.env.CRON_SECRET}`
+  ) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -40,7 +43,8 @@ export async function GET(req: NextRequest) {
     
     // 3. Upsert snapshots
     for (const data of results) {
-       if (data.calculationMode === "unavailable" && !data.previousClose) continue;
+       // Even if calculationMode is unavailable (market closed), we sync if we have ANY price
+       if (!data.previousClose && !data.currentPrice) continue;
 
        await db.insert(premarketSnapshots).values({
          ticker: data.symbol,

@@ -192,6 +192,20 @@ export function getGrade(finalScore: number): "A" | "B" | "C" | "avoid" {
 }
 
 /**
+ * Grade override for data quality
+ */
+export function overrideGradeByDataQuality(
+  originalGrade: "A" | "B" | "C" | "avoid",
+  calcMode: string | null
+): "A" | "B" | "C" | "avoid" {
+  // If premarket data was missing (open-based fallback), do not allow A/B grades
+  if (calcMode !== "premarket" && (originalGrade === "A" || originalGrade === "B")) {
+    return "C";
+  }
+  return originalGrade;
+}
+
+/**
  * Actionable Entry Status (v2)
  */
 export function getEntryStatus(
@@ -291,8 +305,8 @@ export function computeFullScore(input: FullScoreInput): ScoreBreakdown {
     input.gapPct
   );
 
-  const grade = getGrade(finalScore);
-  const isTradeable = checkTradeability(grade, input.penalties, finalScore);
+  const rawGrade = getGrade(finalScore);
+  const isTradeable = checkTradeability(rawGrade, input.penalties, finalScore);
 
   return {
     gapScore,
@@ -303,7 +317,7 @@ export function computeFullScore(input: FullScoreInput): ScoreBreakdown {
     catalystScore,
     totalPenalty,
     finalScore,
-    grade,
+    grade: rawGrade,
     isTradeable,
   };
 }

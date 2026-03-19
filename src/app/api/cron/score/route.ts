@@ -18,14 +18,17 @@ import {
   signals,
 } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
-import { computeFullScore, getEntryStatus } from "@/lib/scoring";
+import { computeFullScore, getEntryStatus, overrideGradeByDataQuality } from "@/lib/scoring";
 
 export const runtime = "nodejs"; // cron jobs use nodejs runtime
 
 export async function GET(req: NextRequest) {
   // Validate cron secret
   const authHeader = req.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (
+    process.env.NODE_ENV !== "development" && 
+    authHeader !== `Bearer ${process.env.CRON_SECRET}`
+  ) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -95,7 +98,9 @@ export async function GET(req: NextRequest) {
         penalties,
       });
 
-      const entryStatus = getEntryStatus(score.grade, {
+      const finalGrade = overrideGradeByDataQuality(score.grade, snap.calculationMode);
+      
+      const entryStatus = getEntryStatus(finalGrade, {
         penalties,
         structure: {
           holdsAboveVwap: intra.holdsAboveVwap ?? false,
@@ -118,7 +123,7 @@ export async function GET(req: NextRequest) {
           catalystScore: score.catalystScore,
           totalPenalty: score.totalPenalty,
           finalScore: score.finalScore,
-          grade: score.grade,
+          grade: finalGrade,
           entryStatus,
           gapPct: snap.gapPct,
           premarketVolume: snap.premarketVolume,
@@ -126,7 +131,7 @@ export async function GET(req: NextRequest) {
           premarketPrice: snap.premarketPrice,
           hasCatalyst,
           catalystType: hasCatalyst ? catalyst?.type : null,
-          isTradeable: score.isTradeable,
+          isTradeable: finalGrade !== "avoid" && score.isTradeable,
           dataSource: snap.dataSource,
           calculationMode: snap.calculationMode,
           lastUpdated: new Date(),
@@ -135,9 +140,9 @@ export async function GET(req: NextRequest) {
           target: [signals.ticker, signals.date],
           set: {
             finalScore: score.finalScore,
-            grade: score.grade,
+            grade: finalGrade,
             entryStatus,
-            isTradeable: score.isTradeable,
+            isTradeable: finalGrade !== "avoid" && score.isTradeable,
             dataSource: snap.dataSource,
             calculationMode: snap.calculationMode,
             lastUpdated: new Date(),

@@ -73,8 +73,11 @@ export class YahooProvider implements MarketDataProvider {
       cache.set(ticker, { data: normalized, timestamp: Date.now() });
       return normalized;
       
-    } catch (error) {
-       console.error(`[YahooProvider] Error fetching ${ticker}:`, error);
+    } catch (error: any) {
+       console.error(`[YahooProvider] ERROR for ${ticker}:`, error.message ?? error);
+       if (error.response) {
+         console.error(`[YahooProvider] Status: ${error.response.status}`);
+       }
        throw error;
     }
   }
