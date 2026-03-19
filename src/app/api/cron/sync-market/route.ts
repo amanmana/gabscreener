@@ -33,14 +33,12 @@ export async function GET(req: NextRequest) {
     const { results, source } = await fetchLiveMarketData(tickers);
     const today = new Date().toISOString().split("T")[0];
 
-    // 3. Upsert into database (Careful with nullability vs schema .notNull())
+    // 3. Upsert into database
     let syncedCount = 0;
     for (const data of results) {
       const snapshotValues = {
         ticker: data.symbol,
         date: today,
-        timestamp: data.dataTimestamp,
-        // Drizzle needs number, not number | null for .notNull() columns
         prevClose: data.previousClose ?? 0,
         premarketPrice: data.currentPrice ?? data.todayOpen ?? 0,
         premarketHigh: data.high,
@@ -59,7 +57,6 @@ export async function GET(req: NextRequest) {
         .onConflictDoUpdate({
           target: [premarketSnapshots.ticker, premarketSnapshots.date],
           set: {
-            timestamp: snapshotValues.timestamp,
             premarketPrice: snapshotValues.premarketPrice,
             premarketHigh: snapshotValues.premarketHigh,
             premarketLow: snapshotValues.premarketLow,
