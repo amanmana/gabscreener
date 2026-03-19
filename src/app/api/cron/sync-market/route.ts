@@ -75,7 +75,18 @@ export async function GET(req: NextRequest) {
        synced++;
     }
 
-    return NextResponse.json({ success: true, synced, count: tickers.length, date: today });
+    return NextResponse.json({ 
+      success: true, 
+      synced, 
+      count: tickers.length, 
+      date: today,
+      debug: results.length > 0 ? {
+        symbol: results[0].symbol,
+        prevClose: results[0].previousClose,
+        currentPrice: results[0].currentPrice,
+        calcMode: results[0].calculationMode
+      } : "no-results"
+    });
     
   } catch (error) {
      console.error("[sync-market] Critical error:", error);
