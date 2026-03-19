@@ -151,7 +151,7 @@ export async function GET(req: NextRequest) {
       processed++;
     }
 
-    return NextResponse.json({ success: true, processed, date: today });
+    return NextResponse.json({ success: true, processed, totalSnapshots: snapshots.length, date: today });
   } catch (err) {
     console.error("[cron/score]", err);
     return NextResponse.json({ error: "Scoring cron failed" }, { status: 500 });
