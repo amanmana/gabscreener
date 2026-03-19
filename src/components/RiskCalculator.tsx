@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Calculator, AlertTriangle } from "lucide-react";
 
 /**
@@ -20,17 +20,29 @@ interface RiskInputs {
 export default function RiskCalculator({
   defaultEntry = 0,
   defaultStop = 0,
+  defaultTarget = 0,
 }: {
   defaultEntry?: number;
   defaultStop?: number;
+  defaultTarget?: number;
 }) {
   const [inputs, setInputs] = useState<RiskInputs>({
     accountSize: 25000,
     riskPct: 1,
     entry: defaultEntry,
     stop: defaultStop,
-    target: 0,
+    target: defaultTarget,
   });
+
+  // Use effect to sync props to state incase client components are cached
+  useEffect(() => {
+    setInputs(prev => ({
+      ...prev,
+      entry: defaultEntry,
+      stop: defaultStop,
+      target: defaultTarget,
+    }));
+  }, [defaultEntry, defaultStop, defaultTarget]);
 
   const set = (k: keyof RiskInputs, v: string) =>
     setInputs((prev) => ({ ...prev, [k]: parseFloat(v) || 0 }));

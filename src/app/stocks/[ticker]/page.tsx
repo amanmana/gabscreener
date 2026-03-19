@@ -163,14 +163,21 @@ export default async function StockDetailPage({
         )}
 
         {/* Risk Calculator */}
-        <RiskCalculator
-          defaultEntry={premarket?.premarketPrice ?? 0}
-          defaultStop={
-            premarket?.premarketVwap
-              ? premarket.premarketVwap * 0.98
-              : 0
-          }
-        />
+        {(() => {
+          const entry = premarket?.premarketPrice ?? 0;
+          const stop = premarket?.premarketVwap ? premarket.premarketVwap * 0.98 : 0;
+          const riskPerShare = entry - stop;
+          const target = riskPerShare > 0 ? entry + riskPerShare * 2 : 0;
+
+          return (
+            <RiskCalculator
+              key={stock.ticker}
+              defaultEntry={Number(entry.toFixed(2))}
+              defaultStop={Number(stop.toFixed(2))}
+              defaultTarget={Number(target.toFixed(2))}
+            />
+          );
+        })()}
       </div>
 
       {/* Metrics grid */}
