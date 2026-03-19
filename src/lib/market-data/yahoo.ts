@@ -1,6 +1,6 @@
 /**
  * Yahoo Finance Provider — High Fidelity Market Data
- * Enhanced with Cloudflare Worker Proxy Support to bypass Vercel IP blocks.
+ * Fixed Version (Vercel Build Safe)
  */
 
 import { NormalizedMarketData, MarketDataProvider, DataSource } from "./types";
@@ -12,7 +12,6 @@ export class YahooProvider implements MarketDataProvider {
     const proxyBase = process.env.YAHOO_PROXY_URL || process.env.NEXT_PUBLIC_YAHOO_PROXY_URL;
     if (!proxyBase) return null;
     
-    // Ensure no trailing slash on base
     const base = proxyBase.replace(/\/$/, "");
     return `${base}?ticker=${ticker}&endpoint=${endpoint}`;
   }
@@ -20,24 +19,19 @@ export class YahooProvider implements MarketDataProvider {
   async fetchQuote(ticker: string): Promise<NormalizedMarketData | null> {
     const proxyUrl = this.getProxyUrl(ticker, 'chart');
     
-    // 1. Try via Proxy first (Best for Vercel/Production)
     if (proxyUrl) {
       try {
-        console.log(`[yahoo] fetching via proxy: ${ticker}`);
         const res = await fetch(proxyUrl, { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
           return this.normalizeChartData(ticker, data);
         }
-        console.warn(`[yahoo] proxy fetch failed for ${ticker}: ${res.status}`);
       } catch (err) {
-        console.error(`[yahoo] proxy error for ${ticker}:`, err);
+        console.error(`[yahoo proxy] ${ticker}:`, err);
       }
     }
 
-    // 2. Fallback to direct fetch (Best for Local/Development)
     try {
-      console.log(`[yahoo] falling back to direct fetch: ${ticker}`);
       const directUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1m&range=1d`;
       const res = await fetch(directUrl, {
         headers: {
@@ -46,13 +40,15 @@ export class YahooProvider implements MarketDataProvider {
         cache: 'no-store'
       });
 
-      if (!res.ok) throw new Error(`Yahoo returned ${res.status}`);
-      const data = await res.json();
-      return this.normalizeChartData(ticker, data);
+      if (res.ok) {
+        const data = await res.json();
+        return this.normalizeChartData(ticker, data);
+      }
     } catch (err) {
-      console.error(`[yahoo] direct fetch failed for ${ticker}:`, err);
-      return null;
+      console.error(`[yahoo direct] ${ticker}:`, err);
     }
+    
+    return null;
   }
 
   async fetchQuotes(tickers: string[]): Promise<NormalizedMarketData[]> {
@@ -62,17 +58,24 @@ export class YahooProvider implements MarketDataProvider {
 
   private normalizeChartData(symbol: string, raw: any): NormalizedMarketData | null {
     try {
-      const result = raw.chart?.result?.[0];
-      if (!result) return null;
-
+      if (!raw?.chart?.result?.[0]) return null;
+      const result = raw.chart.result[0];
       const meta = result.meta;
-      const indicators = result.indicators.quote[0];
-      
+      const quote = result.indicators?.quote?.[0];
+
+      if (!meta) return null;
+
       const prevClose = meta.previousClose;
       const currentPrice = meta.regularMarketPrice;
-      const open = meta.regularMarketOpen || indicators.open?.[0];
+      const open = meta.regularMarketOpen || (quote?.open ? quote.open[0] : currentPrice);
       
-      // Calculate gap if we have enough data
+      // Safe H/L calculation (Vercel Build Safe)
+      const highs: number[] = quote?.high ? quote.high.filter((v: any) => typeof v === 'number') : [];
+      const lows: number[] = quote?.low ? quote.low.filter((v: any) => typeof v === 'number') : [];
+      
+      const sessionHigh = highs.length > 0 ? Math.max(...highs) : currentPrice;
+      const sessionLow = lows.length > 0 ? Math.min(...lows) : currentPrice;
+
       let gapPct = 0;
       if (prevClose && currentPrice) {
         gapPct = ((currentPrice - prevClose) / prevClose) * 100;
@@ -83,17 +86,17 @@ export class YahooProvider implements MarketDataProvider {
         currentPrice,
         previousClose: prevClose,
         open: open || currentPrice,
-        high: Math.max(...(indicators.high?.filter((v:any) => v != null) || [currentPrice])),
-        low: Math.min(...(indicators.low?.filter((v:any) => v != null) || [currentPrice])),
-        premarketVolume: null, // Chart endpoint doesn't usually provide PM Vol, will need 'v7' or 'quote' for that
+        high: sessionHigh,
+        low: sessionLow,
+        premarketVolume: null,
         gapPct,
         dataTimestamp: new Date(meta.regularMarketTime * 1000),
         dataSource: "yahoo",
-        calculationMode: "premarket", // Since we use chart data, we consider it high fidelity
+        calculationMode: "premarket",
         isStale: false
       };
     } catch (err) {
-      console.error(`[yahoo] normalization error for ${symbol}:`, err);
+      console.error(`[yahoo norm] ${symbol}:`, err);
       return null;
     }
   }
