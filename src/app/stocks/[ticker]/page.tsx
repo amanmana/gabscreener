@@ -1,7 +1,7 @@
 /**
  * Stock Detail Page — /stocks/[ticker]
- * Server component. Shows full signal breakdown, risk calculator,
- * catalyst card, and Shariah compliance info.
+ * Direct Server Component querying the database.
+ * No API call means NO domain/VERCEL_URL mismatch issues.
  */
 
 import { notFound } from "next/navigation";
@@ -12,21 +12,20 @@ import EntryStatusBadge from "@/components/EntryStatusBadge";
 import ScoreBreakdown from "@/components/ScoreBreakdown";
 import RiskCalculator from "@/components/RiskCalculator";
 
-export const revalidate = 30;
+// Database
+import { db } from "@/db/client";
+import {
+  stocks,
+  signals,
+  premarketSnapshots,
+  intradayMetrics,
+  catalysts,
+  shariahUniverse,
+  dailyPrices,
+} from "@/db/schema";
+import { eq, and, desc } from "drizzle-orm";
 
-async function getStockData(ticker: string) {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_APP_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
-
-  const res = await fetch(`${baseUrl}/api/stocks/${ticker}`, {
-    next: { revalidate: 30 },
-  });
-
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error("Failed to fetch stock");
-  return res.json();
-}
+export const revalidate = 30; // 30s ISR
 
 export default async function StockDetailPage({
   params,
@@ -34,11 +33,33 @@ export default async function StockDetailPage({
   params: Promise<{ ticker: string }>;
 }) {
   const { ticker } = await params;
-  const data = await getStockData(ticker.toUpperCase());
+  const upper = ticker.toUpperCase();
+  const today = new Date().toISOString().split("T")[0];
 
-  if (!data || !data.stock) notFound();
+  // 1. Fetch data in parallel directly from DB (FAST!)
+  const [
+    [stockRow],
+    [shariahRow],
+    [signal],
+    [premarket],
+    [intraday],
+    [catalyst],
+    priceHistory,
+  ] = await Promise.all([
+    db.select().from(stocks).where(eq(stocks.ticker, upper)).limit(1),
+    db.select().from(shariahUniverse).where(eq(shariahUniverse.ticker, upper)).limit(1),
+    db.select().from(signals).where(and(eq(signals.ticker, upper), eq(signals.date, today))).limit(1),
+    db.select().from(premarketSnapshots).where(and(eq(premarketSnapshots.ticker, upper), eq(premarketSnapshots.date, today))).limit(1),
+    db.select().from(intradayMetrics).where(and(eq(intradayMetrics.ticker, upper), eq(intradayMetrics.date, today))).limit(1),
+    db.select().from(catalysts).where(and(eq(catalysts.ticker, upper), eq(catalysts.date, today))).limit(1),
+    db.select().from(dailyPrices).where(eq(dailyPrices.ticker, upper)).orderBy(desc(dailyPrices.date)).limit(30).catch(() => []),
+  ]);
 
-  const { stock, shariahUniverse, signal, premarket, intraday, catalyst } = data;
+  if (!stockRow) notFound();
+
+  // Handle data format normalization
+  const stock = stockRow;
+  const shariah = shariahRow ?? null;
 
   return (
     <div className="animate-in">
@@ -102,8 +123,8 @@ export default async function StockDetailPage({
               ${premarket?.premarketPrice?.toFixed(2) ?? "—"}
             </div>
             {premarket && (
-              <div style={{ fontSize: 14, fontWeight: 600, color: "#10b981" }}>
-                +{premarket.gapPct.toFixed(2)}%
+              <div style={{ fontSize: 14, fontWeight: 600, color: premarket.gapPct >= 0 ? "#10b981" : "#f43f5e" }}>
+                {premarket.gapPct >= 0 ? "+" : ""}{premarket.gapPct.toFixed(2)}%
               </div>
             )}
             <div style={{ marginTop: 8, display: "flex", gap: 8, justifyContent: "flex-end" }}>
@@ -168,13 +189,14 @@ export default async function StockDetailPage({
               <MetricRow
                 label="PM Volume"
                 value={
+                  premarket.premarketVolume == null ? "—" :
                   premarket.premarketVolume >= 1_000_000
                     ? `${(premarket.premarketVolume / 1_000_000).toFixed(1)}M`
                     : `${(premarket.premarketVolume / 1_000).toFixed(0)}K`
                 }
                 highlight
               />
-              <MetricRow label="Gap %" value={`+${premarket.gapPct.toFixed(2)}%`} highlight />
+              <MetricRow label="Gap %" value={`${premarket.gapPct >= 0 ? "+" : ""}${premarket.gapPct.toFixed(2)}%`} highlight />
             </div>
           ) : (
             <p style={{ color: "var(--text-muted)", fontSize: 12 }}>No premarket data</p>
@@ -188,7 +210,7 @@ export default async function StockDetailPage({
           </h3>
           {intraday ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <MetricRow label="RVOL" value={`${intraday.rvol?.toFixed(1)}x`} highlight />
+              <MetricRow label="RVOL" value={`${intraday.rvol?.toFixed(1) ?? "1.0"}x`} highlight />
               <MetricRow label="Spread %" value={intraday.spreadPct ? `${intraday.spreadPct.toFixed(2)}%` : "—"} />
               <BoolRow label="Holds above VWAP" value={intraday.holdsAboveVwap} />
               <BoolRow label="Near PM High" value={intraday.nearPremarketHigh} />
@@ -212,24 +234,24 @@ export default async function StockDetailPage({
               value={stock.shariahStatus === "compliant" ? "✓ Compliant" : stock.shariahStatus}
               highlight={stock.shariahStatus === "compliant"}
             />
-            {shariahUniverse && (
+            {shariah && (
               <>
-                <MetricRow label="Source" value={shariahUniverse.source} />
-                {shariahUniverse.complianceScore && (
+                <MetricRow label="Source" value={shariah.source} />
+                {shariah.complianceScore && (
                   <MetricRow
                     label="Score"
-                    value={`${shariahUniverse.complianceScore.toFixed(0)}/100`}
+                    value={`${shariah.complianceScore.toFixed(0)}/100`}
                   />
                 )}
-                {shariahUniverse.lastReviewedAt && (
+                {shariah.lastReviewedAt && (
                   <MetricRow
                     label="Last Reviewed"
-                    value={new Date(shariahUniverse.lastReviewedAt).toLocaleDateString()}
+                    value={new Date(shariah.lastReviewedAt).toLocaleDateString()}
                   />
                 )}
-                {shariahUniverse.notes && (
+                {shariah.notes && (
                   <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
-                    {shariahUniverse.notes}
+                    {shariah.notes}
                   </div>
                 )}
               </>
