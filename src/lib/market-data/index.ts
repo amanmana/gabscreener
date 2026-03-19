@@ -1,13 +1,42 @@
 /**
- * Market Data Entry Point
- * Used to centralize which provider the application uses
+ * Market Data Providers
  */
 
-import { yahooProvider } from './yahoo';
-import { MarketDataProvider } from './types';
+import { YahooProvider } from "./yahoo";
+import { StooqProvider } from "./stooq";
+import { MarketDataProvider, NormalizedMarketData } from "./types";
 
-// Exported singleton for app-wide use
-export const marketData: MarketDataProvider = yahooProvider;
+const yahoo = new YahooProvider();
+const stooq = new StooqProvider();
 
-export * from './types';
-export * from './yahoo';
+/**
+ * Resilient Mult-Provider Implementation
+ * Tries Yahoo first, falls back to Stooq if Yahoo is blocked/fails.
+ */
+class FallbackProvider implements MarketDataProvider {
+  name: any = "composite";
+
+  async fetchQuote(ticker: string): Promise<NormalizedMarketData> {
+    try {
+      console.log(`[MarketData] Attempting Yahoo for ${ticker}...`);
+      return await yahoo.fetchQuote(ticker);
+    } catch (err) {
+      console.warn(`[MarketData] Yahoo FAILED for ${ticker}, falling back to Stooq:`, (err as any).message);
+      return await stooq.fetchQuote(ticker);
+    }
+  }
+
+  async fetchQuotes(tickers: string[]): Promise<NormalizedMarketData[]> {
+    // In many cases, if Yahoo is blocked, it's blocked for the whole IP.
+    // So if the first one fails, we might as well switch the whole batch to Stooq.
+    try {
+      return await yahoo.fetchQuotes(tickers);
+    } catch (err) {
+      console.warn(`[MarketData] Batch Yahoo fetch failed, falling back to Stooq.`);
+      return await stooq.fetchQuotes(tickers);
+    }
+  }
+}
+
+export const marketData = new FallbackProvider();
+export { YahooProvider, StooqProvider };

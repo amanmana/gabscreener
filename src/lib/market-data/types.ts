@@ -3,7 +3,7 @@
  * Designed to support multiple providers (Yahoo Finance, IEX, Alpaca, etc.)
  */
 
-export type DataSource = "yahoo" | "iex" | "alpaca" | "mock";
+export type DataSource = "yahoo" | "iex" | "alpaca" | "stooq" | "mock";
 export type CalculationMode = "premarket" | "open-based" | "unavailable";
 
 export interface NormalizedMarketData {
