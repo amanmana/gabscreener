@@ -26,8 +26,8 @@ export async function GET(req: NextRequest) {
 
     const conditions = [
       eq(signals.date, date),
-      gte(signals.gapPct, minGap),
-      gte(signals.premarketVolume, minVol),
+      sql`coalesce(${signals.gapPct}, 0) >= ${minGap}`,
+      sql`coalesce(${signals.premarketVolume}, 0) >= ${minVol}`,
     ];
     if (grades.length > 0) conditions.push(inArray(signals.grade, grades));
     if (requireCatalyst) conditions.push(eq(signals.hasCatalyst, true));
