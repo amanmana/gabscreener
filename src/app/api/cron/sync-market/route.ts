@@ -33,33 +33,41 @@ export async function GET(req: NextRequest) {
     const { results, source } = await fetchLiveMarketData(tickers);
     const today = new Date().toISOString().split("T")[0];
 
-    // 3. Upsert into database
+    // 3. Upsert into database (Careful with nullability vs schema .notNull())
     let syncedCount = 0;
     for (const data of results) {
+      const snapshotValues = {
+        ticker: data.symbol,
+        date: today,
+        timestamp: data.dataTimestamp,
+        // Drizzle needs number, not number | null for .notNull() columns
+        prevClose: data.previousClose ?? 0,
+        premarketPrice: data.currentPrice ?? data.todayOpen ?? 0,
+        premarketHigh: data.high,
+        premarketLow: data.low,
+        premarketVolume: data.premarketVolume,
+        todayOpen: data.todayOpen,
+        gapPct: data.gapPct ?? 0,
+        dataSource: data.dataSource,
+        calculationMode: data.calculationMode,
+        capturedAt: new Date(),
+      };
+
       await db
         .insert(premarketSnapshots)
-        .values({
-          ticker: data.symbol,
-          date: today,
-          timestamp: data.dataTimestamp,
-          prevClose: data.previousClose,
-          premarketPrice: data.currentPrice,
-          premarketHigh: data.high,
-          premarketLow: data.low,
-          premarketVolume: data.premarketVolume,
-          gapPct: data.gapPct,
-          calculationMode: data.calculationMode,
-        })
+        .values(snapshotValues)
         .onConflictDoUpdate({
           target: [premarketSnapshots.ticker, premarketSnapshots.date],
           set: {
-            timestamp: data.dataTimestamp,
-            premarketPrice: data.currentPrice,
-            premarketHigh: data.high,
-            premarketLow: data.low,
-            premarketVolume: data.premarketVolume,
-            gapPct: data.gapPct,
-            calculationMode: data.calculationMode,
+            timestamp: snapshotValues.timestamp,
+            premarketPrice: snapshotValues.premarketPrice,
+            premarketHigh: snapshotValues.premarketHigh,
+            premarketLow: snapshotValues.premarketLow,
+            premarketVolume: snapshotValues.premarketVolume,
+            todayOpen: snapshotValues.todayOpen,
+            gapPct: snapshotValues.gapPct,
+            calculationMode: snapshotValues.calculationMode,
+            capturedAt: snapshotValues.capturedAt,
           },
         });
       syncedCount++;
