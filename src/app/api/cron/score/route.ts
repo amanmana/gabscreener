@@ -45,56 +45,51 @@ export async function GET(req: NextRequest) {
       .where(eq(premarketSnapshots.date, today));
 
     for (const snap of snapshots) {
-      // Get intraday metrics
-      const intra = await db
-        .select()
-        .from(intradayMetrics)
-        .where(
-          and(
-            eq(intradayMetrics.ticker, snap.ticker),
-            eq(intradayMetrics.date, today)
-          )
-        )
-        .limit(1)
-        .then((r) => r[0] ?? null);
+      // Get intraday metrics (or use defaults if market hasn't opened yet)
+      const intra = await db.query.intradayMetrics.findFirst({
+        where: and(eq(intradayMetrics.ticker, snap.ticker), eq(intradayMetrics.date, today))
+      });
 
-      if (!intra) continue;
+      // If no intraday data, use safe defaults for scoring (gap-only analysis)
+      const metrics = intra || {
+        rvol: 1.0,
+        spreadPct: 0.1,
+        dollarVolume: 50_000_000,
+        holdsAboveVwap: true,
+        nearPremarketHigh: true,
+        tightConsolidation: true,
+        weakRejection: false,
+        extendedFromBase: false,
+        choppyStructure: false,
+        poorLiquidityAfterOpen: false,
+      };
 
-      // Check catalyst
-      const catalyst = await db
-        .select()
-        .from(catalysts)
-        .where(
-          and(eq(catalysts.ticker, snap.ticker), eq(catalysts.date, today))
-        )
-        .limit(1)
-        .then((r) => r[0] ?? null);
-
+      const catalyst = await db.query.catalysts.findFirst({
+        where: and(eq(catalysts.ticker, snap.ticker), eq(catalysts.date, today))
+      });
       const hasCatalyst = !!catalyst;
 
       const penalties = {
-        spreadTooWide: (intra.spreadPct ?? 0) > 0.3,
-        weakRejectionAfterOpen: intra.weakRejection ?? false,
-        belowPremarketVwap:
-          !(intra.holdsAboveVwap ?? false) &&
-          (intra.currentPrice ?? snap.premarketPrice) < (snap.premarketVwap ?? snap.premarketPrice),
-        extendedFromBase: intra.extendedFromBase ?? false,
-        choppyStructure: intra.choppyStructure ?? false,
-        poorLiquidityAfterOpen: intra.poorLiquidityAfterOpen ?? false,
+        spreadTooWide: (metrics.spreadPct ?? 0) > 0.3,
+        weakRejectionAfterOpen: metrics.weakRejection ?? false,
+        belowPremarketVwap: !(metrics.holdsAboveVwap ?? true) && (snap.premarketPrice ?? 0) < (snap.premarketVwap ?? 0),
+        extendedFromBase: metrics.extendedFromBase ?? false,
+        choppyStructure: metrics.choppyStructure ?? false,
+        poorLiquidityAfterOpen: metrics.poorLiquidityAfterOpen ?? false,
       };
 
       const score = computeFullScore({
-        gapPct: snap.gapPct,
-        premarketVol: snap.premarketVolume ?? 0,
-        rvol: intra.rvol ?? 1,
+        gapPct: snap.gapPct || 0,
+        premarketVol: snap.premarketVolume || 0,
+        rvol: metrics.rvol || 1.0,
         structure: {
-          holdsAboveVwap: intra.holdsAboveVwap ?? false,
-          nearPremarketHigh: intra.nearPremarketHigh ?? false,
-          tightConsolidation: intra.tightConsolidation ?? false,
+          holdsAboveVwap: metrics.holdsAboveVwap ?? true,
+          nearPremarketHigh: metrics.nearPremarketHigh ?? true,
+          tightConsolidation: metrics.tightConsolidation ?? true,
         },
         liquidity: {
-          tightSpread: (intra.spreadPct ?? 99) < 0.2, // Conservative
-          strongDollarVolume: (intra.dollarVolume ?? 0) > 80_000_000, // Higher conviction
+          tightSpread: (metrics.spreadPct ?? 0) < 0.2,
+          strongDollarVolume: (metrics.dollarVolume ?? 0) > 80_000_000,
         },
         hasCatalyst,
         penalties,
@@ -105,9 +100,9 @@ export async function GET(req: NextRequest) {
       const entryStatus = getEntryStatus(finalGrade, {
         penalties,
         structure: {
-          holdsAboveVwap: intra.holdsAboveVwap ?? false,
-          nearPremarketHigh: intra.nearPremarketHigh ?? false,
-          tightConsolidation: intra.tightConsolidation ?? false,
+          holdsAboveVwap: metrics.holdsAboveVwap ?? true,
+          nearPremarketHigh: metrics.nearPremarketHigh ?? true,
+          tightConsolidation: metrics.tightConsolidation ?? true,
         },
         finalScore: score.finalScore,
       });
@@ -129,7 +124,7 @@ export async function GET(req: NextRequest) {
           entryStatus,
           gapPct: snap.gapPct,
           premarketVolume: snap.premarketVolume,
-          rvol: intra.rvol,
+          rvol: metrics.rvol ?? 1.0,
           premarketPrice: snap.premarketPrice,
           hasCatalyst,
           catalystType: hasCatalyst ? catalyst?.type : null,
